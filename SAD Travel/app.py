@@ -4,7 +4,7 @@ import boto3
 import os
 from decimal import Decimal
 from boto3.dynamodb.conditions import Attr
-from dotenv import load_dotenv
+#from dotenv import load_dotenv
 
 # ================= CONFIG =================
 USE_STATIC_DATA = True  # 🔴 CHANGE TO False when admin DB is ready
@@ -204,3 +204,4 @@ def logout():
 # ==========================================
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000)
+
