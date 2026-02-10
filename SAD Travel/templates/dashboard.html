@@ -11,7 +11,6 @@
             --primary-accent: #00d2ff;
             --bg-color: #0f172a;
             --card-bg: rgba(255, 255, 255, 0.05);
-            --text-muted: #94a3b8;
         }
 
         body {
@@ -34,7 +33,6 @@
             padding: 30px 20px;
             position: fixed;
             height: 100vh;
-            box-sizing: border-box;
         }
 
         .sidebar h2 {
@@ -42,7 +40,6 @@
             color: var(--primary-accent);
             margin-bottom: 40px;
             font-size: 1.5rem;
-            padding-left: 10px;
         }
 
         .nav-links {
@@ -52,15 +49,12 @@
         }
 
         .nav-links a {
-            color: var(--text-muted);
+            color: #94a3b8;
             text-decoration: none;
             padding: 12px 15px;
             border-radius: 10px;
             transition: 0.3s;
             font-weight: 500;
-            display: flex;
-            align-items: center;
-            gap: 10px;
         }
 
         .nav-links a:hover, .nav-links a.active {
@@ -79,7 +73,6 @@
             margin-left: var(--sidebar-width);
             flex: 1;
             padding: 40px 60px;
-            width: calc(100% - var(--sidebar-width));
         }
 
         .header {
@@ -111,7 +104,7 @@
         }
 
         .stat-card span {
-            color: var(--text-muted);
+            color: #94a3b8;
             font-size: 0.8rem;
             text-transform: uppercase;
             letter-spacing: 1px;
@@ -119,7 +112,7 @@
 
         .stat-card h3 {
             margin: 10px 0 0 0;
-            font-size: 1.8rem;
+            font-size: 1.5rem;
             color: var(--primary-accent);
         }
 
@@ -128,19 +121,18 @@
             background: var(--card-bg);
             border-radius: 20px;
             border: 1px solid rgba(255, 255, 255, 0.1);
-            overflow-x: auto;
+            overflow: hidden;
         }
 
         table {
             width: 100%;
             border-collapse: collapse;
             text-align: left;
-            min-width: 800px;
         }
 
         th {
             background: rgba(255, 255, 255, 0.03);
-            color: var(--text-muted);
+            color: #94a3b8;
             font-weight: 600;
             text-transform: uppercase;
             font-size: 0.75rem;
@@ -151,12 +143,7 @@
         td {
             padding: 20px;
             border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-            font-size: 0.9rem;
-            vertical-align: middle;
-        }
-
-        tr:last-child td {
-            border-bottom: none;
+            font-size: 0.95rem;
         }
 
         tr:hover {
@@ -168,13 +155,12 @@
             border-radius: 20px;
             font-size: 0.75rem;
             font-weight: 700;
-            display: inline-block;
         }
 
-        .badge-Bus { background: rgba(255, 77, 77, 0.15); color: #ff4d4d; border: 1px solid rgba(255, 77, 77, 0.3); }
-        .badge-Flight { background: rgba(0, 210, 255, 0.15); color: #00d2ff; border: 1px solid rgba(0, 210, 255, 0.3); }
-        .badge-Train { background: rgba(39, 174, 96, 0.15); color: #2ecc71; border: 1px solid rgba(39, 174, 96, 0.3); }
-        .badge-Hotel { background: rgba(197, 160, 89, 0.15); color: #c5a059; border: 1px solid rgba(197, 160, 89, 0.3); }
+        .badge-Bus { background: rgba(255, 77, 77, 0.2); color: #ff4d4d; }
+        .badge-Flight { background: rgba(0, 210, 255, 0.2); color: #00d2ff; }
+        .badge-Train { background: rgba(39, 174, 96, 0.2); color: #2ecc71; }
+        .badge-Hotel { background: rgba(197, 160, 89, 0.2); color: #c5a059; }
 
         /* Action Buttons styling */
         .btn-action {
@@ -184,13 +170,11 @@
             border-radius: 6px;
             transition: 0.2s;
             display: inline-block;
-            cursor: pointer;
         }
 
         .btn-print {
             color: var(--primary-accent);
             border: 1px solid var(--primary-accent);
-            background: transparent;
         }
 
         .btn-print:hover {
@@ -201,8 +185,7 @@
         @media (max-width: 900px) {
             .sidebar { width: 80px; padding: 20px 10px; }
             .sidebar h2, .nav-links a span { display: none; }
-            .nav-links a { justify-content: center; }
-            .main-content { margin-left: 80px; padding: 20px; width: calc(100% - 80px); }
+            .main-content { margin-left: 80px; padding: 20px; }
         }
     </style>
 </head>
@@ -223,7 +206,7 @@
     <main class="main-content">
         <div class="header">
             <h1>Welcome, {{ name }}!</h1>
-            <div id="dateDisplay" style="color: var(--text-muted);"></div>
+            <div style="color: #94a3b8;">{{ date }}</div>
         </div>
 
         <div class="stats-grid">
@@ -232,27 +215,26 @@
                 <h3>{{ bookings|length }}</h3>
             </div>
             <div class="stat-card">
-                <span>Active Status</span>
-                <h3 style="color: #2ecc71;">Active</h3>
+                <span>Active Trips</span>
+                <h3>1</h3>
             </div>
             <div class="stat-card">
-                <span>Account Tier</span>
-                <h3>Standard</h3>
+                <span>Membership</span>
+                <h3>Elite</h3>
             </div>
         </div>
 
-        <h3 style="font-family: 'Montserrat', sans-serif; margin-bottom: 20px;">Your Travel History</h3>
+        <h3>Travel History</h3>
         <div class="table-container">
             <table>
                 <thead>
                     <tr>
-                        <th>Ref ID</th>
+                        <th>ID</th>
                         <th>Service</th>
-                        <th>Route</th>
                         <th>Details</th>
                         <th>Travel Date</th>
                         <th>Amount</th>
-                        <th>Action</th>
+                        <th>Actions</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -260,28 +242,18 @@
                     <tr>
                         <td style="font-family: monospace; color: var(--primary-accent);">#{{ booking.booking_id }}</td>
                         <td><span class="badge badge-{{ booking.type }}">{{ booking.type }}</span></td>
-                        <td>
-                            {% if booking.type == 'Hotel' %}
-                                {{ booking.destination }} <small>(City)</small>
-                            {% else %}
-                                {{ booking.source }} ➝ {{ booking.destination }}
-                            {% endif %}
-                        </td>
-                        <td style="color: #cbd5e1;">{{ booking.details }}</td>
+                        <td>{{ booking.details }}</td>
                         <td>{{ booking.date }}</td>
                         <td style="font-weight: 600;">₹{{ booking.price }}</td>
                         <td>
-                            <!-- Replaced url_for('print_ticket') with a placeholder since route doesn't exist in app.py yet -->
-                            <button onclick="window.print()" class="btn-action btn-print">
+                            <a href="{{ url_for('print_ticket', booking_id=booking.booking_id) }}" target="_blank" class="btn-action btn-print">
                                 Print 🖨️
-                            </button>
+                            </a>
                         </td>
                     </tr>
                     {% else %}
                     <tr>
-                        <td colspan="7" style="text-align: center; padding: 40px; color: var(--text-muted);">
-                            No bookings found. Start your journey by booking a service!
-                        </td>
+                        <td colspan="6" style="text-align: center; color: #64748b;">No booking history found.</td>
                     </tr>
                     {% endfor %}
                 </tbody>
@@ -289,10 +261,5 @@
         </div>
     </main>
 
-    <script>
-        // Simple JS to set the date since app.py doesn't pass it
-        const dateOptions = { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' };
-        document.getElementById('dateDisplay').textContent = new Date().toLocaleDateString('en-US', dateOptions);
-    </script>
 </body>
 </html>
