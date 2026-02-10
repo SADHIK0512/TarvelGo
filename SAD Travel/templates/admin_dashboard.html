@@ -4,13 +4,14 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Admin Panel | TravelGo</title>
-    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700&family=Inter:wght@400;500&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
     <style>
         :root {
             --primary: #00d2ff;
             --accent: #f87171;
             --bg: #0f172a;
             --card: rgba(255, 255, 255, 0.05);
+            --success: #2ecc71;
         }
 
         body {
@@ -29,6 +30,7 @@
             padding: 30px 20px;
             border-right: 1px solid rgba(255, 255, 255, 0.1);
             position: fixed;
+            box-sizing: border-box;
         }
 
         .sidebar h2 {
@@ -38,11 +40,21 @@
             margin-bottom: 40px;
         }
 
+        .sidebar a {
+            color: #cbd5e1;
+            text-decoration: none;
+            display: block;
+            padding: 10px 0;
+            transition: 0.3s;
+        }
+        
+        .sidebar a:hover { color: white; }
+
         /* Main Area */
         .main {
-            margin-left: 280px;
+            margin-left: 240px;
             padding: 40px;
-            width: 100%;
+            width: calc(100% - 240px);
         }
 
         .glass-card {
@@ -50,34 +62,60 @@
             backdrop-filter: blur(10px);
             border: 1px solid rgba(255, 255, 255, 0.1);
             border-radius: 15px;
-            padding: 25px;
+            padding: 30px;
             margin-bottom: 30px;
         }
+
+        h1 { font-family: 'Montserrat', sans-serif; margin-bottom: 30px; }
 
         h3 {
             font-family: 'Montserrat', sans-serif;
             color: var(--primary);
             margin-top: 0;
+            margin-bottom: 20px;
+            font-size: 1.1rem;
+            border-bottom: 1px solid rgba(255,255,255,0.1);
+            padding-bottom: 15px;
+        }
+
+        /* Flash Messages */
+        .flash-messages {
+            margin-bottom: 20px;
+        }
+        .alert {
+            padding: 15px;
+            border-radius: 8px;
+            background: rgba(46, 204, 113, 0.15);
+            border: 1px solid var(--success);
+            color: var(--success);
+            margin-bottom: 10px;
         }
 
         /* Form Styling */
         .admin-form {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 15px;
+            gap: 20px;
         }
 
         .admin-form input, .admin-form select {
             background: rgba(0, 0, 0, 0.3);
             border: 1px solid rgba(255, 255, 255, 0.2);
-            padding: 12px;
+            padding: 14px;
             border-radius: 8px;
             color: white;
             outline: none;
+            font-family: inherit;
+            transition: 0.3s;
         }
 
-        .admin-form input:focus {
+        .admin-form input:focus, .admin-form select:focus {
             border-color: var(--primary);
+            background: rgba(0, 0, 0, 0.5);
+        }
+
+        .full-width {
+            grid-column: 1 / -1;
         }
 
         .btn-submit {
@@ -85,11 +123,14 @@
             background: linear-gradient(to right, #00d2ff, #3a7bd5);
             color: white;
             border: none;
-            padding: 12px;
+            padding: 14px;
             border-radius: 8px;
             font-weight: 700;
             cursor: pointer;
             transition: 0.3s;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            font-size: 0.9rem;
         }
 
         .btn-submit:hover {
@@ -98,10 +139,8 @@
         }
 
         .logout-link {
-            display: block;
             margin-top: 50px;
-            color: var(--accent);
-            text-decoration: none;
+            color: var(--accent) !important;
             font-weight: 600;
         }
     </style>
@@ -111,8 +150,8 @@
     <aside class="sidebar">
         <h2>TravelGo Admin</h2>
         <nav>
-            <p style="color: #94a3b8; font-size: 0.8rem; text-transform: uppercase;">Management</p>
-            <a href="/dashboard" style="color: white; text-decoration: none; display: block; margin-bottom: 15px;">📊 View User Site</a>
+            <p style="color: #64748b; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 1px;">Management</p>
+            <a href="/dashboard">📊 View User Site</a>
             <a href="/logout" class="logout-link">🚪 Logout</a>
         </nav>
     </aside>
@@ -120,19 +159,31 @@
     <main class="main">
         <h1>Administrative Dashboard</h1>
 
+        <!-- Flash Messages Block -->
+        <div class="flash-messages">
+            {% with messages = get_flashed_messages() %}
+                {% if messages %}
+                    {% for message in messages %}
+                        <div class="alert">✅ {{ message }}</div>
+                    {% endfor %}
+                {% endif %}
+            {% endwith %}
+        </div>
+
         <div class="glass-card">
             <h3>Add New Transport Service</h3>
             <form action="/admin/add_transport" method="POST" class="admin-form">
-                <select name="category" required>
+                <select name="category" required class="full-width">
+                    <option value="" disabled selected>Select Category</option>
                     <option value="bus">Bus Service</option>
                     <option value="train">Train Route</option>
                     <option value="flight">Flight Schedule</option>
                 </select>
                 <input type="text" name="name" placeholder="Carrier Name (e.g., IndiGo)" required>
-                <input type="text" name="source" placeholder="Departure City" required>
-                <input type="text" name="destination" placeholder="Arrival City" required>
                 <input type="number" name="price" placeholder="Ticket Price (₹)" required>
-                <input type="text" name="details" placeholder="Service Details (e.g., AC Sleeper)" required>
+                <input type="text" name="source" placeholder="Departure City (Source)" required>
+                <input type="text" name="destination" placeholder="Arrival City (Destination)" required>
+                <input type="text" name="details" placeholder="Service Details (e.g., AC Sleeper, 14:00 PM)" required class="full-width">
                 <button type="submit" class="btn-submit">Register Transport</button>
             </form>
         </div>
@@ -143,7 +194,7 @@
                 <input type="text" name="name" placeholder="Hotel Name" required>
                 <input type="text" name="location" placeholder="City Location" required>
                 <input type="number" name="price" placeholder="Price per Night (₹)" required>
-                <input type="text" name="details" placeholder="Class (e.g., 5-Star Luxury)" required>
+                <input type="text" name="details" placeholder="Class/Amenities (e.g., 5-Star Luxury, Wifi)" required>
                 <button type="submit" class="btn-submit">Add Hotel</button>
             </form>
         </div>
