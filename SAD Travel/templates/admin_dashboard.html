@@ -151,8 +151,8 @@
         <h2>TravelGo Admin</h2>
         <nav>
             <p style="color: #64748b; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 1px;">Management</p>
-            <a href="/dashboard">📊 View User Site</a>
-            <a href="/logout" class="logout-link">🚪 Logout</a>
+            <a href="{{ url_for('dashboard') }}">📊 View User Site</a>
+            <a href="{{ url_for('logout') }}" class="logout-link">🚪 Logout</a>
         </nav>
     </aside>
 
@@ -172,7 +172,8 @@
 
         <div class="glass-card">
             <h3>Add New Transport Service</h3>
-            <form action="/admin/add_transport" method="POST" class="admin-form">
+            <!-- Updated action to use url_for -->
+            <form action="{{ url_for('add_transport') }}" method="POST" class="admin-form">
                 <select name="category" required class="full-width">
                     <option value="" disabled selected>Select Category</option>
                     <option value="bus">Bus Service</option>
@@ -190,7 +191,8 @@
 
         <div class="glass-card">
             <h3>Add New Hotel Listing</h3>
-            <form action="/admin/add_hotel" method="POST" class="admin-form">
+            <!-- Updated action to use url_for -->
+            <form action="{{ url_for('add_hotel') }}" method="POST" class="admin-form">
                 <input type="text" name="name" placeholder="Hotel Name" required>
                 <input type="text" name="location" placeholder="City Location" required>
                 <input type="number" name="price" placeholder="Price per Night (₹)" required>
