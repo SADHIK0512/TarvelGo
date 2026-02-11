@@ -10,20 +10,26 @@ from decimal import Decimal
 app = Flask(__name__)
 app.secret_key = "travelgo_secret"
 
+# Helper to handle DynamoDB Decimals in Flask templates
+@app.template_filter('force_float')
+def force_float(value):
+    if isinstance(value, Decimal):
+        return float(value)
+    return value
+
 # ==========================================
 # AWS SETUP (IAM ROLE BASED)
 # ==========================================
-# We do not use .env or keys here. Boto3 will automatically find 
-# the IAM Role attached to your EC2 instance.
 AWS_REGION = "ap-south-1"
 
-dynamodb = boto3.resource("dynamodb", region_name=AWS_REGION)
-# sns = boto3.client("sns", region_name=AWS_REGION) # Uncomment if you need SNS
-
-# DynamoDB Tables (Matching your specific AWS spelling)
-users_table = dynamodb.Table("travel-Users")
-bookings_table = dynamodb.Table("Bookinngs")  # NOTE: double 'n' as per your table
-services_table = dynamodb.Table("TravelServices")
+try:
+    dynamodb = boto3.resource("dynamodb", region_name=AWS_REGION)
+    # DynamoDB Tables 
+    users_table = dynamodb.Table("travel-Users")
+    bookings_table = dynamodb.Table("Bookinngs")  # Using your specific spelling
+    services_table = dynamodb.Table("TravelServices")
+except Exception as e:
+    print(f"AWS Configuration Error: {e}")
 
 # ==========================================
 # ADMIN CONFIG
@@ -46,20 +52,18 @@ def home():
 @app.route("/login", methods=["GET", "POST"])
 def login():
     if request.method == "POST":
-        email = request.form["email"]
-        password = request.form["password"]
+        email = request.form.get("email")
+        password = request.form.get("password")
 
-        # 1. Admin Login Check
         if email == ADMIN_EMAIL and password == ADMIN_PASSWORD:
             session["user"] = email
             return redirect("/admin")
 
-        # 2. User Login Check
         try:
             response = users_table.get_item(Key={"email": email})
             user = response.get("Item")
             
-            if user and user["password"] == password:
+            if user and user.get("password") == password:
                 session["user"] = email
                 # Update login count
                 users_table.update_item(
@@ -72,7 +76,7 @@ def login():
                 return render_template("login.html", error="Invalid Credentials")
         except Exception as e:
             print(f"Login Error: {e}")
-            return render_template("login.html", error="System Error")
+            return render_template("login.html", error="System Error or User not found")
 
     return render_template("login.html")
 
@@ -80,18 +84,18 @@ def login():
 @app.route("/register", methods=["GET", "POST"])
 def register():
     if request.method == "POST":
-        email = request.form["email"]
+        email = request.form.get("email")
+        name = request.form.get("name")
+        password = request.form.get("password")
         try:
-            # Check if user already exists
             if "Item" in users_table.get_item(Key={"email": email}):
                 return render_template("register.html", message="User already exists")
 
-            # Create new user
             users_table.put_item(Item={
                 "email": email,
-                "name": request.form["name"],
-                "password": request.form["password"],
-                "logins": 0
+                "name": name,
+                "password": password,
+                "logins": Decimal(0)
             })
             return redirect("/login")
         except Exception as e:
@@ -107,18 +111,22 @@ def dashboard():
 
     email = session["user"]
     
-    # Fetch User's Bookings
-    response = bookings_table.scan(FilterExpression=Attr("email").eq(email))
-    bookings = response.get("Items", [])
-    
-    # Fetch User's Name
-    user_resp = users_table.get_item(Key={"email": email})
-    user_name = user_resp.get("Item", {}).get("name", "User")
+    try:
+        # Fetch User's Bookings
+        response = bookings_table.scan(FilterExpression=Attr("email").eq(email))
+        bookings = response.get("Items", [])
+        
+        # Fetch User's Name
+        user_resp = users_table.get_item(Key={"email": email})
+        user_name = user_resp.get("Item", {}).get("name", "User")
 
-    return render_template("dashboard.html", name=user_name, bookings=bookings)
+        return render_template("dashboard.html", name=user_name, bookings=bookings)
+    except Exception as e:
+        print(f"Dashboard Error: {e}")
+        return "Internal Server Error", 500
 
 # ==========================================
-# ADMIN BACKEND (Add Data to DynamoDB)
+# ADMIN BACKEND
 # ==========================================
 
 @app.route("/admin")
@@ -130,57 +138,55 @@ def admin_portal():
 def add_transport():
     if not is_admin(): return redirect("/")
 
-    service_id = str(uuid.uuid4())[:8]
-    category = request.form["category"] # bus, train, flight
-
-    # Create Item for TravelServices Table
-    item = {
-        "service_id": service_id,
-        "category": category,
-        "name": request.form["name"],
-        "source": request.form["source"].strip(),
-        "destination": request.form["destination"].strip(),
-        "price": Decimal(request.form["price"]),
-        "details": request.form["details"]
-    }
-
-    services_table.put_item(Item=item)
-    flash(f"{category.title()} added successfully!")
+    try:
+        service_id = str(uuid.uuid4())[:8]
+        category = request.form["category"] 
+        item = {
+            "service_id": service_id,
+            "category": category,
+            "name": request.form["name"],
+            "source": request.form["source"].strip(),
+            "destination": request.form["destination"].strip(),
+            "price": Decimal(str(request.form["price"])),
+            "details": request.form["details"]
+        }
+        services_table.put_item(Item=item)
+        flash(f"{category.title()} added successfully!")
+    except Exception as e:
+        flash(f"Error adding transport: {e}")
     return redirect("/admin")
 
 @app.route("/admin/add_hotel", methods=["POST"])
 def add_hotel():
     if not is_admin(): return redirect("/")
 
-    service_id = str(uuid.uuid4())[:8]
-
-    # Create Hotel Item
-    item = {
-        "service_id": service_id,
-        "category": "hotel",
-        "name": request.form["name"],
-        "location": request.form["location"].strip(),
-        "price": Decimal(request.form["price"]),
-        "details": request.form["details"]
-    }
-
-    services_table.put_item(Item=item)
-    flash("Hotel added successfully!")
+    try:
+        service_id = str(uuid.uuid4())[:8]
+        item = {
+            "service_id": service_id,
+            "category": "hotel",
+            "name": request.form["name"],
+            "location": request.form["location"].strip(),
+            "price": Decimal(str(request.form["price"])),
+            "details": request.form["details"]
+        }
+        services_table.put_item(Item=item)
+        flash("Hotel added successfully!")
+    except Exception as e:
+        flash(f"Error adding hotel: {e}")
     return redirect("/admin")
 
 # ==========================================
-# DYNAMIC SEARCH LOGIC (From DynamoDB)
+# SEARCH LOGIC
 # ==========================================
 
 def search_services(category, source=None, destination=None, location=None):
     try:
         if category == "hotel":
-            # Search hotels by Location (City)
             response = services_table.scan(
                 FilterExpression=Attr("category").eq("hotel") & Attr("location").eq(location)
             )
         else:
-            # Search Transport by Source & Destination
             response = services_table.scan(
                 FilterExpression=Attr("category").eq(category) & 
                                  Attr("source").eq(source) & 
@@ -195,8 +201,8 @@ def search_services(category, source=None, destination=None, location=None):
 def bus():
     results = None
     if request.method == "POST":
-        s = request.form["source"].strip()
-        d = request.form["destination"].strip()
+        s = request.form.get("source", "").strip()
+        d = request.form.get("destination", "").strip()
         results = search_services("bus", source=s, destination=d)
     return render_template("bus.html", buses=results)
 
@@ -204,8 +210,8 @@ def bus():
 def train():
     results = None
     if request.method == "POST":
-        s = request.form["source"].strip()
-        d = request.form["destination"].strip()
+        s = request.form.get("source", "").strip()
+        d = request.form.get("destination", "").strip()
         results = search_services("train", source=s, destination=d)
     return render_template("train.html", trains=results)
 
@@ -213,8 +219,8 @@ def train():
 def flight():
     results = None
     if request.method == "POST":
-        s = request.form["source"].strip()
-        d = request.form["destination"].strip()
+        s = request.form.get("source", "").strip()
+        d = request.form.get("destination", "").strip()
         results = search_services("flight", source=s, destination=d)
     return render_template("flight.html", flights=results)
 
@@ -222,31 +228,32 @@ def flight():
 def hotels():
     results = None
     if request.method == "POST":
-        city = request.form["city"].strip()
+        city = request.form.get("city", "").strip()
         results = search_services("hotel", location=city)
     return render_template("hotels.html", hotels=results)
 
 # ==========================================
-# BOOKING & PAYMENT FLOW
+# BOOKING FLOW
 # ==========================================
 
 @app.route("/book", methods=["POST"])
 def book():
     if "user" not in session: return redirect("/login")
     
-    # Create Pending Booking Object
+    # Cast price to string then Decimal to avoid precision float errors
+    price_val = request.form.get("price", "0")
+    
     session["pending_booking"] = {
         "booking_id": str(uuid.uuid4())[:8],
-        "email": session["user"], # Partition Key for Bookinngs table
+        "email": session["user"], 
         "type": request.form.get("type", "Service"),
         "source": request.form.get("source", "N/A"),
         "destination": request.form.get("destination", "N/A"),
         "date": request.form.get("date", "N/A"),
         "details": request.form.get("details", "N/A"),
-        "price": Decimal(request.form["price"])
+        "price": price_val 
     }
 
-    # Redirect: Transport -> Seat Selection | Hotel -> Payment directly
     if session["pending_booking"]["type"] in ["Bus", "Train", "Flight"]:
         return redirect("/select_seats")
         
@@ -261,8 +268,10 @@ def select_seats():
 def confirm_seats():
     if "pending_booking" not in session: return redirect("/")
     
-    seats = request.form.get("selected_seats")
+    seats = request.form.get("selected_seats", "None")
     session["pending_booking"]["details"] += f" | Seats: {seats}"
+    # Re-save to session to ensure details update
+    session.modified = True
     return render_template("payment.html", booking=session["pending_booking"])
 
 @app.route("/payment", methods=["POST"])
@@ -270,24 +279,24 @@ def payment():
     if "pending_booking" not in session: return redirect("/")
     
     booking = session.pop("pending_booking")
-    booking["payment_reference"] = request.form["reference"]
-    booking["payment_method"] = request.form["method"]
+    booking["payment_reference"] = request.form.get("reference", "N/A")
+    booking["payment_method"] = request.form.get("method", "Card")
+    # Convert price back to Decimal for DynamoDB storage
+    booking["price"] = Decimal(str(booking["price"]))
     
-    # Save to DynamoDB
-    bookings_table.put_item(Item=booking)
+    try:
+        bookings_table.put_item(Item=booking)
+    except Exception as e:
+        print(f"Booking Save Error: {e}")
+        return f"Error saving booking: {e}"
     
     return redirect("/dashboard")
 
-# --- UTILS ---
 @app.route("/logout")
 def logout():
     session.clear()
     return redirect("/")
 
-@app.route("/contact", methods=["POST"])
-def contact():
-    # Placeholder for contact form (optional: save to DB)
-    return redirect("/")
-
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=5000)
+    # Use debug=True locally to see the exact line causing any errors
+    app.run(host="0.0.0.0", port=5000, debug=True)
