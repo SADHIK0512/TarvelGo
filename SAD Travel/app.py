@@ -1,8 +1,9 @@
-from flask import Flask, render_template, request, redirect, session, flash
+from flask import Flask, render_template, request, redirect, session, flash, url_for
 import uuid
 import boto3
-from boto3.dynamodb.conditions import Attr
+from boto3.dynamodb.conditions import Attr, Key
 from decimal import Decimal
+import os
 
 # ==========================================
 # APP SETUP
@@ -10,29 +11,26 @@ from decimal import Decimal
 app = Flask(__name__)
 app.secret_key = "travelgo_secret"
 
-# Helper to handle DynamoDB Decimals in Flask templates
-@app.template_filter('force_float')
-def force_float(value):
-    if isinstance(value, Decimal):
-        return float(value)
-    return value
+# ==========================================
+# AWS SETUP
+# ==========================================
+AWS_REGION = "ap-south-1" # Ensure this matches your AWS Console Region
 
-# ==========================================
-# AWS SETUP (IAM ROLE BASED)
-# ==========================================
-AWS_REGION = "ap-south-1"
+# DynamoDB Table Names (Ensure these match your AWS Console EXACTLY)
+TABLE_USERS = "travel-Users"
+TABLE_BOOKINGS = "Bookings"        # Fixed typo from 'Bookinngs'
+TABLE_SERVICES = "TravelServices"
 
 try:
     dynamodb = boto3.resource("dynamodb", region_name=AWS_REGION)
-    # DynamoDB Tables 
-    users_table = dynamodb.Table("travel-Users")
-    bookings_table = dynamodb.Table("Bookinngs")  # Using your specific spelling
-    services_table = dynamodb.Table("TravelServices")
+    users_table = dynamodb.Table(TABLE_USERS)
+    bookings_table = dynamodb.Table(TABLE_BOOKINGS)
+    services_table = dynamodb.Table(TABLE_SERVICES)
 except Exception as e:
     print(f"AWS Configuration Error: {e}")
 
 # ==========================================
-# ADMIN CONFIG
+# ADMIN CREDENTIALS
 # ==========================================
 ADMIN_EMAIL = "admin@gmail.com"
 ADMIN_PASSWORD = "admin123"
@@ -55,10 +53,12 @@ def login():
         email = request.form.get("email")
         password = request.form.get("password")
 
+        # Admin Login Check
         if email == ADMIN_EMAIL and password == ADMIN_PASSWORD:
             session["user"] = email
             return redirect("/admin")
 
+        # User Login Check
         try:
             response = users_table.get_item(Key={"email": email})
             user = response.get("Item")
@@ -88,8 +88,9 @@ def register():
         name = request.form.get("name")
         password = request.form.get("password")
         try:
+            # Check if user exists
             if "Item" in users_table.get_item(Key={"email": email}):
-                return render_template("register.html", message="User already exists")
+                return render_template("login.html", error="User already exists. Please Login.")
 
             users_table.put_item(Item={
                 "email": email,
@@ -101,7 +102,7 @@ def register():
         except Exception as e:
             return render_template("register.html", message=f"Error: {e}")
 
-    return render_template("register.html")
+    return render_template("index.html") # Redirecting to home/login context if GET
 
 # --- DASHBOARD ---
 @app.route("/dashboard")
@@ -112,18 +113,45 @@ def dashboard():
     email = session["user"]
     
     try:
-        # Fetch User's Bookings
+        # Fetch User's Bookings - Using FilterExpression (Scan)
+        # Ideally, create a GSI on 'email' for better performance
         response = bookings_table.scan(FilterExpression=Attr("email").eq(email))
         bookings = response.get("Items", [])
         
         # Fetch User's Name
         user_resp = users_table.get_item(Key={"email": email})
-        user_name = user_resp.get("Item", {}).get("name", "User")
+        user_name = user_resp.get("Item", {}).get("name", "Traveler")
 
         return render_template("dashboard.html", name=user_name, bookings=bookings)
     except Exception as e:
         print(f"Dashboard Error: {e}")
-        return "Internal Server Error", 500
+        return f"Error loading dashboard: {e}"
+
+# --- PRINT TICKET (Fixed Missing Route) ---
+@app.route("/print_ticket/<booking_id>")
+def print_ticket(booking_id):
+    if "user" not in session: return redirect("/login")
+    
+    try:
+        # Try to get item directly if booking_id is Primary Key
+        response = bookings_table.get_item(Key={'booking_id': booking_id})
+        booking = response.get('Item')
+
+        # Fallback: Scan if booking_id is not the primary key in your table
+        if not booking:
+            response = bookings_table.scan(FilterExpression=Attr('booking_id').eq(booking_id))
+            items = response.get('Items', [])
+            if items:
+                booking = items[0]
+
+        if booking:
+            return render_template("ticket.html", booking=booking)
+        else:
+            return "Ticket not found.", 404
+            
+    except Exception as e:
+        print(f"Ticket Fetch Error: {e}")
+        return f"Error fetching ticket: {e}"
 
 # ==========================================
 # ADMIN BACKEND
@@ -140,20 +168,29 @@ def add_transport():
 
     try:
         service_id = str(uuid.uuid4())[:8]
-        category = request.form["category"] 
+        # Normalize inputs: Source/Dest -> Title Case, Category -> lowercase
+        category = request.form["category"].lower() 
+        name = request.form["name"]
+        source = request.form["source"].strip().title()
+        destination = request.form["destination"].strip().title()
+        price = Decimal(str(request.form["price"]))
+        details = request.form["details"]
+
         item = {
             "service_id": service_id,
             "category": category,
-            "name": request.form["name"],
-            "source": request.form["source"].strip(),
-            "destination": request.form["destination"].strip(),
-            "price": Decimal(str(request.form["price"])),
-            "details": request.form["details"]
+            "name": name,
+            "source": source,
+            "destination": destination,
+            "price": price,
+            "details": details
         }
         services_table.put_item(Item=item)
         flash(f"{category.title()} added successfully!")
     except Exception as e:
+        print(f"Admin Add Error: {e}") # Print to console for debugging
         flash(f"Error adding transport: {e}")
+    
     return redirect("/admin")
 
 @app.route("/admin/add_hotel", methods=["POST"])
@@ -162,18 +199,25 @@ def add_hotel():
 
     try:
         service_id = str(uuid.uuid4())[:8]
+        name = request.form["name"]
+        location = request.form["location"].strip().title()
+        price = Decimal(str(request.form["price"]))
+        details = request.form["details"]
+
         item = {
             "service_id": service_id,
             "category": "hotel",
-            "name": request.form["name"],
-            "location": request.form["location"].strip(),
-            "price": Decimal(str(request.form["price"])),
-            "details": request.form["details"]
+            "name": name,
+            "location": location,
+            "price": price,
+            "details": details
         }
         services_table.put_item(Item=item)
         flash("Hotel added successfully!")
     except Exception as e:
+        print(f"Admin Hotel Error: {e}")
         flash(f"Error adding hotel: {e}")
+    
     return redirect("/admin")
 
 # ==========================================
@@ -183,14 +227,17 @@ def add_hotel():
 def search_services(category, source=None, destination=None, location=None):
     try:
         if category == "hotel":
+            # Search Hotels by City (Location)
             response = services_table.scan(
-                FilterExpression=Attr("category").eq("hotel") & Attr("location").eq(location)
+                FilterExpression=Attr("category").eq("hotel") & Attr("location").eq(location.title())
             )
         else:
+            # Search Transport (Bus/Train/Flight)
+            # Using .title() to match "Mumbai" even if user types "mumbai"
             response = services_table.scan(
                 FilterExpression=Attr("category").eq(category) & 
-                                 Attr("source").eq(source) & 
-                                 Attr("destination").eq(destination)
+                                 Attr("source").eq(source.title()) & 
+                                 Attr("destination").eq(destination.title())
             )
         return response.get("Items", [])
     except Exception as e:
@@ -204,7 +251,7 @@ def bus():
         s = request.form.get("source", "").strip()
         d = request.form.get("destination", "").strip()
         results = search_services("bus", source=s, destination=d)
-    return render_template("bus.html", buses=results)
+    return render_template("bus.html", buses=results, source=request.form.get("source"), destination=request.form.get("destination"))
 
 @app.route("/train", methods=["GET", "POST"])
 def train():
@@ -213,7 +260,7 @@ def train():
         s = request.form.get("source", "").strip()
         d = request.form.get("destination", "").strip()
         results = search_services("train", source=s, destination=d)
-    return render_template("train.html", trains=results)
+    return render_template("train.html", trains=results, source=request.form.get("source"), destination=request.form.get("destination"))
 
 @app.route("/flight", methods=["GET", "POST"])
 def flight():
@@ -222,46 +269,53 @@ def flight():
         s = request.form.get("source", "").strip()
         d = request.form.get("destination", "").strip()
         results = search_services("flight", source=s, destination=d)
-    return render_template("flight.html", flights=results)
+    return render_template("flight.html", flights=results, source=request.form.get("source"), destination=request.form.get("destination"))
 
 @app.route("/hotels", methods=["GET", "POST"])
 def hotels():
     results = None
+    city_searched = ""
     if request.method == "POST":
-        city = request.form.get("city", "").strip()
-        results = search_services("hotel", location=city)
-    return render_template("hotels.html", hotels=results)
+        city_searched = request.form.get("city", "").strip()
+        results = search_services("hotel", location=city_searched)
+    return render_template("hotels.html", hotels=results, city=city_searched)
 
 # ==========================================
-# BOOKING FLOW
+# BOOKING FLOW (FIXED)
 # ==========================================
 
 @app.route("/book", methods=["POST"])
 def book():
     if "user" not in session: return redirect("/login")
     
-    # Cast price to string then Decimal to avoid precision float errors
+    # Capture form data
+    booking_type = request.form.get("type", "Service")
     price_val = request.form.get("price", "0")
     
     session["pending_booking"] = {
         "booking_id": str(uuid.uuid4())[:8],
         "email": session["user"], 
-        "type": request.form.get("type", "Service"),
+        "type": booking_type,
         "source": request.form.get("source", "N/A"),
         "destination": request.form.get("destination", "N/A"),
         "date": request.form.get("date", "N/A"),
         "details": request.form.get("details", "N/A"),
         "price": price_val 
     }
+    session.modified = True # Important: Force session save
 
-    if session["pending_booking"]["type"] in ["Bus", "Train", "Flight"]:
+    # Redirect to seat selection for Transport
+    # Ensure "Bus", "Train", "Flight" match the values in your HTML hidden inputs
+    if booking_type in ["Bus", "Train", "Flight"]:
         return redirect("/select_seats")
         
+    # Skip seats for Hotels
     return render_template("payment.html", booking=session["pending_booking"])
 
 @app.route("/select_seats")
 def select_seats():
     if "user" not in session: return redirect("/login")
+    if "pending_booking" not in session: return redirect("/")
     return render_template("select_seats.html")
 
 @app.route("/confirm_seats", methods=["POST"])
@@ -269,26 +323,31 @@ def confirm_seats():
     if "pending_booking" not in session: return redirect("/")
     
     seats = request.form.get("selected_seats", "None")
+    
+    # Append seat info to details
     session["pending_booking"]["details"] += f" | Seats: {seats}"
-    # Re-save to session to ensure details update
-    session.modified = True
+    session.modified = True # Important: Force session save
+    
     return render_template("payment.html", booking=session["pending_booking"])
 
 @app.route("/payment", methods=["POST"])
 def payment():
     if "pending_booking" not in session: return redirect("/")
     
+    # Retrieve booking from session
     booking = session.pop("pending_booking")
+    
+    # Add payment details
     booking["payment_reference"] = request.form.get("reference", "N/A")
     booking["payment_method"] = request.form.get("method", "Card")
-    # Convert price back to Decimal for DynamoDB storage
-    booking["price"] = Decimal(str(booking["price"]))
+    booking["price"] = Decimal(str(booking["price"])) # Convert to Decimal for DynamoDB
     
     try:
         bookings_table.put_item(Item=booking)
+        print("Booking saved successfully")
     except Exception as e:
         print(f"Booking Save Error: {e}")
-        return f"Error saving booking: {e}"
+        return f"Error saving booking to database: {e}"
     
     return redirect("/dashboard")
 
@@ -298,5 +357,4 @@ def logout():
     return redirect("/")
 
 if __name__ == "__main__":
-    # Use debug=True locally to see the exact line causing any errors
     app.run(host="0.0.0.0", port=5000, debug=True)
