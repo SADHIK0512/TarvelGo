@@ -18,7 +18,7 @@ AWS_REGION = "ap-south-1" # Ensure this matches your AWS Console Region
 
 # DynamoDB Table Names (Ensure these match your AWS Console EXACTLY)
 TABLE_USERS = "travel-Users"
-TABLE_BOOKINGS = "Bookings"        # Fixed typo from 'Bookinngs'
+TABLE_BOOKINGS = "Bookings"        
 TABLE_SERVICES = "TravelServices"
 
 try:
@@ -56,7 +56,7 @@ def login():
         # Admin Login Check
         if email == ADMIN_EMAIL and password == ADMIN_PASSWORD:
             session["user"] = email
-            return redirect("/admin")
+            return redirect(url_for('admin_portal'))
 
         # User Login Check
         try:
@@ -71,7 +71,7 @@ def login():
                     UpdateExpression="ADD logins :inc",
                     ExpressionAttributeValues={":inc": Decimal(1)}
                 )
-                return redirect("/dashboard")
+                return redirect(url_for('dashboard'))
             else:
                 return render_template("login.html", error="Invalid Credentials")
         except Exception as e:
@@ -98,7 +98,7 @@ def register():
                 "password": password,
                 "logins": Decimal(0)
             })
-            return redirect("/login")
+            return redirect(url_for('login'))
         except Exception as e:
             return render_template("register.html", message=f"Error: {e}")
 
@@ -107,14 +107,13 @@ def register():
 # --- DASHBOARD ---
 @app.route("/dashboard")
 def dashboard():
-    if "user" not in session: return redirect("/login")
-    if is_admin(): return redirect("/admin")
+    if "user" not in session: return redirect(url_for('login'))
+    if is_admin(): return redirect(url_for('admin_portal'))
 
     email = session["user"]
     
     try:
         # Fetch User's Bookings - Using FilterExpression (Scan)
-        # Ideally, create a GSI on 'email' for better performance
         response = bookings_table.scan(FilterExpression=Attr("email").eq(email))
         bookings = response.get("Items", [])
         
@@ -130,7 +129,7 @@ def dashboard():
 # --- PRINT TICKET (Fixed Missing Route) ---
 @app.route("/print_ticket/<booking_id>")
 def print_ticket(booking_id):
-    if "user" not in session: return redirect("/login")
+    if "user" not in session: return redirect(url_for('login'))
     
     try:
         # Try to get item directly if booking_id is Primary Key
@@ -159,12 +158,12 @@ def print_ticket(booking_id):
 
 @app.route("/admin")
 def admin_portal():
-    if not is_admin(): return redirect("/login")
+    if not is_admin(): return redirect(url_for('login'))
     return render_template("admin_dashboard.html")
 
 @app.route("/admin/add_transport", methods=["POST"])
 def add_transport():
-    if not is_admin(): return redirect("/")
+    if not is_admin(): return redirect(url_for('home'))
 
     try:
         service_id = str(uuid.uuid4())[:8]
@@ -191,11 +190,11 @@ def add_transport():
         print(f"Admin Add Error: {e}") # Print to console for debugging
         flash(f"Error adding transport: {e}")
     
-    return redirect("/admin")
+    return redirect(url_for('admin_portal'))
 
 @app.route("/admin/add_hotel", methods=["POST"])
 def add_hotel():
-    if not is_admin(): return redirect("/")
+    if not is_admin(): return redirect(url_for('home'))
 
     try:
         service_id = str(uuid.uuid4())[:8]
@@ -218,7 +217,7 @@ def add_hotel():
         print(f"Admin Hotel Error: {e}")
         flash(f"Error adding hotel: {e}")
     
-    return redirect("/admin")
+    return redirect(url_for('admin_portal'))
 
 # ==========================================
 # SEARCH LOGIC
@@ -286,7 +285,7 @@ def hotels():
 
 @app.route("/book", methods=["POST"])
 def book():
-    if "user" not in session: return redirect("/login")
+    if "user" not in session: return redirect(url_for('login'))
     
     # Capture form data
     booking_type = request.form.get("type", "Service")
@@ -307,20 +306,20 @@ def book():
     # Redirect to seat selection for Transport
     # Ensure "Bus", "Train", "Flight" match the values in your HTML hidden inputs
     if booking_type in ["Bus", "Train", "Flight"]:
-        return redirect("/select_seats")
+        return redirect(url_for('select_seats'))
         
     # Skip seats for Hotels
     return render_template("payment.html", booking=session["pending_booking"])
 
 @app.route("/select_seats")
 def select_seats():
-    if "user" not in session: return redirect("/login")
-    if "pending_booking" not in session: return redirect("/")
+    if "user" not in session: return redirect(url_for('login'))
+    if "pending_booking" not in session: return redirect(url_for('home'))
     return render_template("select_seats.html")
 
 @app.route("/confirm_seats", methods=["POST"])
 def confirm_seats():
-    if "pending_booking" not in session: return redirect("/")
+    if "pending_booking" not in session: return redirect(url_for('home'))
     
     seats = request.form.get("selected_seats", "None")
     
@@ -332,7 +331,7 @@ def confirm_seats():
 
 @app.route("/payment", methods=["POST"])
 def payment():
-    if "pending_booking" not in session: return redirect("/")
+    if "pending_booking" not in session: return redirect(url_for('home'))
     
     # Retrieve booking from session
     booking = session.pop("pending_booking")
@@ -349,12 +348,12 @@ def payment():
         print(f"Booking Save Error: {e}")
         return f"Error saving booking to database: {e}"
     
-    return redirect("/dashboard")
+    return redirect(url_for('dashboard'))
 
 @app.route("/logout")
 def logout():
     session.clear()
-    return redirect("/")
+    return redirect(url_for('home'))
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
